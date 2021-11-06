@@ -247,7 +247,7 @@ for periodo in t_periodo:
 for periodo in t_periodo:
     m.addConstr(quicksum(varIm[medicamento, periodo] * medicamentos_Am[medicamento][periodo] + quicksum( \
         varM[medicamento, laboratorio, periodo] * medicamentos_Q[medicamento][(periodo, laboratorio)] \
-        for laboratorio in l_laboratorios) for medicamento in d_medicamentos), \
+        for laboratorio in l_laboratorios) for medicamento in d_medicamentos) <= medicamentos_Z[periodo], \
         'presMedic_{}'.format(periodo))
 
 #H: Minimo medicamentos:
