@@ -1,7 +1,6 @@
 from gurobipy import GRB, Model, quicksum
 
 m = Model('Optimizacion de recursos hospitalarios')
-M = 10^(60)
 
 #max 108.750.000
 
@@ -51,7 +50,10 @@ personal_V = {
     'pab' : {'ene' : 15, 'feb' : 15, 'mar' : 15, 'abr' : 5, 'may' : 5}, 
 }
 personal_A = {
-    'ene' : 108750000, 'feb' : 108750000, 'mar' : 108750000, 'abr' : 108750000, 'may' : 108750000
+    'adm' : {'ene' : 108750000, 'feb' : 108750000, 'mar' : 108750000, 'abr' : 108750000, 'may' : 108750000}, 
+    'urg' : {'ene' : 108750000, 'feb' : 108750000, 'mar' : 108750000, 'abr' : 108750000, 'may' : 108750000},
+    'clin' : {'ene' : 108750000, 'feb' : 108750000, 'mar' : 108750000, 'abr' : 108750000, 'may' : 108750000}, 
+    'pab' : {'ene' : 108750000, 'feb' : 108750000, 'mar' : 108750000, 'abr' : 108750000, 'may' : 108750000}, 
 }
 insumos_G = {
     'bisturi' : {'ene' : 50, 'feb' : 50, 'mar' : 50, 'abr' : 50, 'may' : 50}, 
@@ -76,9 +78,9 @@ insumos_L = {
     'ene' : 1000000, 'feb' : 1000000, 'mar' : 1000000, 'abr' : 1000000, 'may' : 1000000
 }
 insumos_Ii = {
-    'bisturi' : {'ene' : 0, 'feb' : 0, 'mar' : 0, 'abr' : 0, 'may' : 0}, 
-    'pinzas' : {'ene' : 0, 'feb' : 0, 'mar' : 0, 'abr' : 0, 'may' : 0}, 
-    'papel' : {'ene' : 0, 'feb' : 0, 'mar' : 0, 'abr' : 0, 'may' : 0}
+    'bisturi' : {'ene' : 0, 'feb' : 20, 'mar' : 20, 'abr' : 20, 'may' : 20}, 
+    'pinzas' : {'ene' : 0, 'feb' : 20, 'mar' : 20, 'abr' : 20, 'may' : 20}, 
+    'papel' : {'ene' : 0, 'feb' : 20, 'mar' : 20, 'abr' : 20, 'may' : 20}
 }
 insumos_Ai = {
     'bisturi' : {'ene' : 100, 'feb' : 100, 'mar' : 100, 'abr' : 100, 'may' : 100}, 
@@ -169,33 +171,24 @@ medicamentos_CFm = {
 
 #=====VARIABLES DE DECISION=====
 varA = {}
-varP = {}
 varG = {}
 varS = {}
 varM = {}
 varQ = {}
-varIi = {}
-varIm = {}
 varSn = {}
 varSd = {}
-varRa = {}
-varHm = {}
 
 for periodo in t_periodo:
     for personal in i_personal:
         for contrato in c_contratos:
             varA[personal, contrato, periodo] = m.addVar(vtype=GRB.INTEGER, name="varA_{}_{}_{}".format(personal, contrato, periodo))
-    for rubro in f_rubros:
-        varP[rubro, periodo] = m.addVar(vtype=GRB.CONTINUOUS, name="varP_{}_{}".format(rubro, periodo))
     for insumo in n_insumos:
         varS[insumo, periodo] = m.addVar(vtype=GRB.INTEGER, name="varS_{}_{}".format(insumo, periodo))
-        varIi[insumo, periodo] = m.addVar(vtype=GRB.INTEGER, name="varIi_{}_{}".format(insumo, periodo))
         for bodega in v_bodegas:
             varG[insumo, bodega, periodo] = m.addVar(vtype=GRB.INTEGER, name="varG_{}_{}_{}".format(insumo, bodega, periodo))
             varSn[insumo, bodega, periodo] = m.addVar(lb=0, ub=1, vtype=GRB.BINARY, name="varSn_{}_{}_{}".format(insumo, bodega, periodo))
     for medicamento in d_medicamentos:
         varQ[medicamento, periodo] = m.addVar(vtype=GRB.INTEGER, name="varQ_{}_{}".format(medicamento, periodo))
-        varIm[medicamento, periodo] = m.addVar(vtype=GRB.INTEGER, name="varIm_{}_{}".format(medicamento, periodo))
         for laboratorio in l_laboratorios:
             varM[medicamento, laboratorio, periodo] = m.addVar(vtype=GRB.INTEGER, name="varM_{}_{}_{}".format(medicamento, laboratorio, periodo))
             varSd[medicamento, laboratorio, periodo] = m.addVar(lb=0, ub=1, vtype=GRB.BINARY, name="varSd_{}_{}_{}".format(medicamento, laboratorio, periodo))
@@ -209,12 +202,7 @@ for periodo in t_periodo:
     for personal in i_personal:
         for rubro in f_rubros:
             m.addConstr(quicksum(personal_H[personal][(periodo, contrato)] * varA[personal, contrato, periodo] for contrato in c_contratos) \
-                <= varP[rubro, periodo], 'presuFunc_{}_{}_{}'.format(personal, rubro, periodo))
-
-#B: Presupuesto por tipo no exceder total:
-for periodo in t_periodo:
-    m.addConstr(quicksum(varP[rubro, periodo] for rubro in f_rubros) <= personal_A[periodo], \
-        'presuRubr_{}'.format(periodo))
+                <= personal_A[rubro][periodo], 'presuFunc_{}_{}_{}'.format(personal, rubro, periodo))
 
 #C: Minimo de funcionarios:
 for periodo in t_periodo:
@@ -225,10 +213,9 @@ for periodo in t_periodo:
 
 #D: Presupuesto insumos:
 for periodo in t_periodo:
-    for insumo in n_insumos:
-        m.addConstr(varIi[insumo, periodo] * insumos_Ai[insumo][periodo] + quicksum( \
-            varG[insumo, bodega, periodo] * insumos_E[insumo][(periodo, bodega)] for bodega in v_bodegas) \
-            <= insumos_L[periodo], 'presuInsu_{}_{}'.format(insumo, periodo))
+    m.addConstr(quicksum(insumos_Ii[insumo][periodo] * insumos_Ai[insumo][periodo] + quicksum( \
+        varG[insumo, bodega, periodo] * insumos_E[insumo][(periodo, bodega)] for bodega in v_bodegas) \
+        for insumo in n_insumos) <= insumos_L[periodo], 'presuInsu_{}'.format(periodo))
 
 #E: Minimo insumos:
 for periodo in t_periodo:
@@ -245,7 +232,7 @@ for periodo in t_periodo:
 
 #G: Presupuesto medicamentos:
 for periodo in t_periodo:
-    m.addConstr(quicksum(varIm[medicamento, periodo] * medicamentos_Am[medicamento][periodo] + quicksum( \
+    m.addConstr(quicksum(medicamentos_Im[medicamento][periodo] * medicamentos_Am[medicamento][periodo] + quicksum( \
         varM[medicamento, laboratorio, periodo] * medicamentos_Q[medicamento][(periodo, laboratorio)] \
         for laboratorio in l_laboratorios) for medicamento in d_medicamentos) <= medicamentos_Z[periodo], \
         'presMedic_{}'.format(periodo))
@@ -267,24 +254,25 @@ for periodo in t_periodo:
 for periodo_index, periodo in enumerate(t_periodo):
     for medicamento in d_medicamentos:
         if periodo_index == 0:
-            m.addConstr(medicamentos_Im[medicamento][periodo] + quicksum(varM[medicamento, laboratorio, periodo] for laboratorio in l_laboratorios) \
-                == varQ[medicamento, periodo] + medicamentos_Im[medicamento][periodo], 'invMedIni_{}_{}'.format(medicamento, periodo))
+            m.addConstr(medicamentos_Im[medicamento][periodo] + quicksum(varM[medicamento, laboratorio, t_periodo[periodo_index + 1]] for laboratorio in l_laboratorios) \
+                == varQ[medicamento, t_periodo[periodo_index + 1]] + medicamentos_Im[medicamento][t_periodo[periodo_index + 1]], 'invMedIni_{}_{}'.format(medicamento, periodo))
         else:
-            m.addConstr(medicamentos_Im[medicamento][t_periodo[periodo_index-1]] + quicksum(varM[medicamento, laboratorio, periodo] for laboratorio in l_laboratorios) \
+            m.addConstr(medicamentos_Im[medicamento][t_periodo[periodo_index - 1]] + quicksum(varM[medicamento, laboratorio, periodo] for laboratorio in l_laboratorios) \
                 == varQ[medicamento, periodo] + medicamentos_Im[medicamento][periodo], 'invMedicm_{}_{}'.format(medicamento, periodo))
 
 #L-M: Inv insumos:
 for periodo_index, periodo in enumerate(t_periodo):
     for insumo in n_insumos:
         if periodo_index == 0:
-            m.addConstr(insumos_Ii[insumo][periodo] + quicksum(varG[insumo, bodega, periodo] for bodega in v_bodegas) \
-                == varS[insumo, periodo] + insumos_Ii[insumo][periodo], 'invInsIni_{}_{}'.format(insumo, periodo))
+            m.addConstr(insumos_Ii[insumo][periodo] + quicksum(varG[insumo, bodega, t_periodo[periodo_index + 1]] for bodega in v_bodegas) \
+                == varS[insumo, t_periodo[periodo_index + 1]] + insumos_Ii[insumo][t_periodo[periodo_index + 1]], 'invInsIni_{}_{}'.format(insumo, periodo))
         else:
-            m.addConstr(insumos_Ii[insumo][t_periodo[periodo_index-1]] + quicksum(varG[insumo, bodega, periodo] for bodega in v_bodegas) \
+            m.addConstr(insumos_Ii[insumo][t_periodo[periodo_index - 1]] + quicksum(varG[insumo, bodega, periodo] for bodega in v_bodegas) \
                 == varS[insumo, periodo] + insumos_Ii[insumo][periodo], 'invInsumo_{}_{}'.format(insumo, periodo))
 
 #=====FUNCION OBJETIVO=====
-sum_personal = quicksum(varP[rubro, periodo] for rubro in f_rubros)
+sum_personal = quicksum(quicksum(personal_H[personal][(periodo, contrato)] * varA[personal, contrato, periodo] \
+                for contrato in c_contratos) for rubro in f_rubros)
 sum_insumos = quicksum(insumos_Ai[insumo][periodo] * insumos_Ii[insumo][periodo] + quicksum( \
                 insumos_E[insumo][(periodo, bodega)] * varG[insumo, bodega, periodo] + \
                 insumos_CFi[insumo][(periodo, bodega)] * varSn[insumo, bodega, periodo] \
